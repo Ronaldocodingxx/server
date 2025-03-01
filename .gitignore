@@ -1,0 +1,31 @@
+# Abhängigkeiten
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+
+# Umgebungsvariablen
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Betriebssystem-Dateien
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Verzeichnisse
+dist/
+build/
+coverage/
+
+# Editor-Konfigurationen
+.idea/
+.vscode/
+*.swp
+*.swo
