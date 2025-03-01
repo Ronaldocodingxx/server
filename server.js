@@ -49,17 +49,51 @@ app.use((err, req, res, next) => {
   });
 });
 
-// MongoDB Verbindung mit verbesserter Fehlerbehandlung
+// MongoDB Verbindung mit Wiederverbindungslogik
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://doadmin:N2tc591wjX436D0f@mongodb-4c0ff5ca.mongo.ondigitalocean.com/admin?retryWrites=true&w=majority';
 
-mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => logger.info('MongoDB erfolgreich verbunden'))
-.catch(err => {
-  logger.error('MongoDB Verbindungsfehler:', err);
-  process.exit(1); // Beendet den Prozess bei Verbindungsfehler
+// Verbindungsfunktion, die wiederverwendet werden kann
+const connectToMongoDB = () => {
+  mongoose.connect(MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => {
+    logger.info('MongoDB erfolgreich verbunden');
+    // Server ist betriebsbereit mit Datenbank
+  })
+  .catch(err => {
+    logger.error('MongoDB Verbindungsfehler:', err);
+    logger.info('Server läuft weiter, versuche in 30 Sekunden erneut zu verbinden...');
+    // Nach 30 Sekunden erneut versuchen zu verbinden
+    setTimeout(connectToMongoDB, 30000);
+  });
+};
+
+// Erste Verbindung herstellen
+connectToMongoDB();
+
+// Eventhandler für Verbindungsprobleme hinzufügen
+mongoose.connection.on('disconnected', () => {
+  logger.warn('MongoDB getrennt. Versuche erneut zu verbinden...');
+  setTimeout(connectToMongoDB, 10000);
+});
+
+mongoose.connection.on('error', (err) => {
+  logger.error('MongoDB Verbindungsfehler während des Betriebs:', err);
+  // NICHT process.exit(1) aufrufen - lassen Sie den Server weiterlaufen
+});
+
+// Globaler unhandled promise rejection handler
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unbehandelte Promise-Ablehnung:', reason);
+  // Server NICHT beenden
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Nicht abgefangene Ausnahme:', error);
+  // In Produktionsumgebungen könnte ein Neustart durch einen Process Manager (wie PM2) sinnvoll sein
+  // Server läuft jedoch weiter
 });
 
 // Verbesserte Schema-Definition
@@ -94,7 +128,7 @@ messageSchema.pre('save', function(next) {
 
 const Message = mongoose.model('Message', messageSchema);
 
-// API-Endpunkte mit verbesserter Fehlerbehandlung
+// API-Endpunkte mit verbesserter Fehlerbehandlung und try-catch
 app.get('/api/messages', async (req, res) => {
   try {
     const messages = await Message.find()
@@ -186,7 +220,7 @@ process.on('SIGTERM', () => {
     logger.info('HTTP-Server geschlossen');
     mongoose.connection.close(false, () => {
       logger.info('MongoDB-Verbindung geschlossen');
-      process.exit(0);
+      // Entfernt: process.exit(0); - wird automatisch beendet
     });
   });
 });
