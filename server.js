@@ -199,6 +199,11 @@ app.get('/', (req, res) => {
   });
 });
 
+// Health-Check-Endpunkt für DigitalOcean hinzufügen
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');  // Einfache Textantwort mit 200-Status
+});
+
 // Behandlung nicht gefundener Routen
 app.use((req, res, next) => {
   res.status(404).json({
