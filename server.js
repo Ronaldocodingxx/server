@@ -26,9 +26,21 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health Check Route - WICHTIG: Dies muss VOR der Catch-All-Route stehen
+// Health Check Route
 app.get('/health', (req, res) => {
-  res.status(200).send('OK');
+  res.status(200).json({ status: 'OK', message: 'Server is running' });
+});
+
+// Root-Route
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    message: 'API Server läuft',
+    version: '1.0.0',
+    endpoints: [
+      '/health',
+      '/api/auth/*'
+    ]
+  });
 });
 
 // API-Routen
@@ -50,11 +62,20 @@ mongoose.connect(MONGO_URI)
 
 // Statischen Ordner für Frontend-Dateien (falls benötigt)
 if (process.env.NODE_ENV === 'production') {
+  // Statische Dateien bereitstellen
   app.use(express.static(path.join(__dirname, 'public')));
   
-  // Catch-All Route NACH Health-Check und API-Routen
+  // Catch-All Route nach allen anderen definierten Routen
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  });
+} else {
+  // Catch-All für nicht definierte Routen im Entwicklungsmodus
+  app.use((req, res) => {
+    res.status(404).json({
+      message: 'Route nicht gefunden',
+      path: req.originalUrl
+    });
   });
 }
 
@@ -63,4 +84,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server läuft auf Port ${PORT}`);
   console.log(`Umgebung: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Health-Check verfügbar unter: /health`);
 });
