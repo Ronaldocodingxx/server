@@ -7,6 +7,27 @@ const path = require('path');
 // Env-Variablen laden
 dotenv.config();
 
+// Überprüfe wichtige Umgebungsvariablen
+const checkRequiredEnvVars = () => {
+  const requiredVars = [
+    'JWT_SECRET',
+    'MONGO_URI',
+    'EMAIL_HOST',
+    'EMAIL_PORT',
+    'EMAIL_USER',
+    'EMAIL_PASS'
+  ];
+  
+  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+  
+  if (missingVars.length > 0) {
+    console.warn(`WARNUNG: Fehlende Umgebungsvariablen: ${missingVars.join(', ')}`);
+    return false;
+  }
+  
+  return true;
+};
+
 // Express-App erstellen
 const app = express();
 
@@ -38,14 +59,11 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: [
       '/health',
-      '/api/auth/*'
+      '/api/auth/*',
+      '/api/messages/*'
     ]
   });
 });
-
-// API-Routen
-const authRoutes = require('./routes/auth');
-app.use('/api/auth', authRoutes);
 
 // MongoDB-Verbindung
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/auth-app';
@@ -59,6 +77,14 @@ mongoose.connect(MONGO_URI)
       mongoose.connect(MONGO_URI);
     }, 5000);
   });
+
+// API-Routen
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
+
+// Neue Messages-Routen hinzufügen
+const messagesRoutes = require('./routes/messages');
+app.use('/api/messages', messagesRoutes);
 
 // Statischen Ordner für Frontend-Dateien (falls benötigt)
 if (process.env.NODE_ENV === 'production') {
@@ -81,8 +107,37 @@ if (process.env.NODE_ENV === 'production') {
 
 // Server starten
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server läuft auf Port ${PORT}`);
   console.log(`Umgebung: ${process.env.NODE_ENV || 'development'}`);
   console.log(`Health-Check verfügbar unter: /health`);
+  
+  // Überprüfe Umgebungsvariablen
+  const envCheck = checkRequiredEnvVars();
+  if (!envCheck) {
+    console.warn('Server läuft, aber einige Funktionen könnten aufgrund fehlender Umgebungsvariablen nicht richtig funktionieren.');
+  }
+});
+
+// Graceful Shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM empfangen. Server wird heruntergefahren...');
+  server.close(() => {
+    console.log('Server beendet.');
+    mongoose.connection.close(false, () => {
+      console.log('MongoDB-Verbindung geschlossen.');
+      process.exit(0);
+    });
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT empfangen. Server wird heruntergefahren...');
+  server.close(() => {
+    console.log('Server beendet.');
+    mongoose.connection.close(false, () => {
+      console.log('MongoDB-Verbindung geschlossen.');
+      process.exit(0);
+    });
+  });
 });
