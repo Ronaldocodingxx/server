@@ -26,6 +26,15 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Health Check Route - WICHTIG: Dies muss VOR der Catch-All-Route stehen
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
+// API-Routen
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
+
 // MongoDB-Verbindung
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/auth-app';
 
@@ -39,23 +48,15 @@ mongoose.connect(MONGO_URI)
     }, 5000);
   });
 
-// API-Routen
-const authRoutes = require('./routes/auth');
-app.use('/api/auth', authRoutes);
-
 // Statischen Ordner für Frontend-Dateien (falls benötigt)
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'public')));
   
+  // Catch-All Route NACH Health-Check und API-Routen
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
   });
 }
-
-// Health Check für Digital Ocean
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
 
 // Server starten
 const PORT = process.env.PORT || 3000;
