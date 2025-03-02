@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const verifyToken = require('../middleware/auth'); // Diese Middleware wird separat erstellt
+const verifyToken = require('../middleware/auth'); // Richtige Import-Anweisung
 
 // Schema für Nachrichten
 const messageSchema = new mongoose.Schema({
