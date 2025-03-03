@@ -33,7 +33,7 @@ const loginLimiter = rateLimit({
 // Rate-Limiter für Password-Reset (Schutz vor Missbrauch)
 const passwordResetLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 Stunde
-    max: 3, // max 3 Anfragen pro IP in einer Stunde
+    max: 5, // max 3 Anfragen pro IP in einer Stunde
     message: {
         message: 'Zu viele Passwort-Reset-Anfragen. Bitte versuchen Sie es in 1 Stunde erneut.'
     },
