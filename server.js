@@ -15,7 +15,8 @@ const checkRequiredEnvVars = () => {
     'EMAIL_HOST',
     'EMAIL_PORT',
     'EMAIL_USER',
-    'EMAIL_PASS'
+    'EMAIL_PASS',
+    'GOOGLE_CLIENT_ID'  // Neue Variable für Google OAuth
   ];
   
   const missingVars = requiredVars.filter(varName => !process.env[varName]);
@@ -80,7 +81,9 @@ mongoose.connect(MONGO_URI)
 
 // API-Routen
 const authRoutes = require('./routes/auth');
+const googleAuthRoutes = require('./routes/google-auth'); // Neue Zeile für Google Auth
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', googleAuthRoutes); // Neue Zeile für Google Auth
 
 // Neue Messages-Routen hinzufügen
 const messagesRoutes = require('./routes/messages');
