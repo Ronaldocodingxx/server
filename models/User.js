@@ -1,19 +1,29 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken'); // Stelle sicher, dass jsonwebtoken installiert ist
 
 const UserSchema = new mongoose.Schema({
     // Persönliche Informationen
     firstName: {
         type: String,
-        required: true
+        required: function() {
+            // Nur erforderlich, wenn nicht über Google angemeldet
+            return !this.googleId;
+        }
     },
     lastName: {
         type: String,
-        required: true
+        required: function() {
+            // Nur erforderlich, wenn nicht über Google angemeldet
+            return !this.googleId;
+        }
     },
     birthDate: {
         type: Date,
-        required: true,
+        required: function() {
+            // Nur erforderlich, wenn nicht über Google angemeldet
+            return !this.googleId;
+        },
         get: function(date) {
             // Nur Datum zurückgeben, nicht Zeit
             return date ? date.toISOString().split('T')[0] : null;
@@ -23,8 +33,12 @@ const UserSchema = new mongoose.Schema({
     // Konto-Informationen
     username: {
         type: String,
-        required: true,
-        unique: true
+        required: function() {
+            // Nur erforderlich, wenn nicht über Google angemeldet
+            return !this.googleId;
+        },
+        unique: true,
+        sparse: true // Erlaubt null/undefined bei Eindeutigkeitseinschränkung
     },
     email: {
         type: String,
@@ -32,19 +46,45 @@ const UserSchema = new mongoose.Schema({
         unique: true
     },
     
+    // Google Auth Felder
+    googleId: {
+        type: String,
+        unique: true,
+        sparse: true // Erlaubt null/undefined bei Eindeutigkeitseinschränkung
+    },
+    authProvider: {
+        type: String,
+        enum: ['local', 'google'],
+        default: 'local'
+    },
+    profilePicture: {
+        type: String,
+        default: ''
+    },
+    
     // Sicherheitsinformationen
     password: {
         type: String,
-        required: true
+        required: function() {
+            // Passwort ist nur erforderlich, wenn nicht über Google angemeldet
+            return !this.googleId;
+        }
     },
     termsAccepted: {
         type: Boolean,
-        required: true,
+        required: function() {
+            // Nur erforderlich, wenn nicht über Google angemeldet
+            return !this.googleId;
+        },
         default: false
     },
         
     // E-Mail-Verifizierung
     isVerified: {
+        type: Boolean,
+        default: false
+    },
+    emailVerified: { // Zweites Feld für Google Auth
         type: Boolean,
         default: false
     },
@@ -73,7 +113,11 @@ const UserSchema = new mongoose.Schema({
     name: {
         type: String,
         default: function() {
-            return `${this.firstName} ${this.lastName}`;
+            if (this.firstName && this.lastName) {
+                return `${this.firstName} ${this.lastName}`;
+            } else {
+                return this.name || '';
+            }
         }
     },
     createdAt: {
@@ -88,7 +132,8 @@ const UserSchema = new mongoose.Schema({
 
 // Passwort vor dem Speichern hashen
 UserSchema.pre('save', async function(next) {
-    if (!this.isModified('password')) return next();
+    // Wenn Passwort nicht geändert wurde oder Google-Anmeldung
+    if (!this.isModified('password') || this.googleId) return next();
     
     try {
         const salt = await bcrypt.genSalt(10);
@@ -98,5 +143,25 @@ UserSchema.pre('save', async function(next) {
         next(error);
     }
 });
+
+// Methode zum Generieren eines JWT-Tokens
+UserSchema.methods.generateAuthToken = function() {
+    const token = jwt.sign(
+        { 
+            id: this._id,
+            email: this.email,
+            name: this.name || `${this.firstName} ${this.lastName}`
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }  // Token läuft nach 7 Tagen ab
+    );
+    
+    return token;
+};
+
+// Methode zum Überprüfen des Passworts
+UserSchema.methods.validatePassword = async function(password) {
+    return await bcrypt.compare(password, this.password);
+};
 
 module.exports = mongoose.model('User', UserSchema);
