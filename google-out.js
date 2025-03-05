@@ -32,6 +32,38 @@ async function verifyGoogleToken(token) {
 }
 
 /**
+ * Generiere einen einzigartigen Benutzernamen basierend auf der E-Mail
+ * @param {string} email - Die E-Mail-Adresse des Benutzers
+ * @returns {string} Ein generierter Benutzername
+ */
+async function generateUniqueUsername(email, name) {
+  // Basis-Benutzername erstellen
+  let baseUsername = '';
+  
+  if (name) {
+    // Wenn ein Name vorhanden ist, verwende diesen als Basis
+    baseUsername = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  } else {
+    // Sonst verwende den Teil der E-Mail vor dem @
+    baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+  
+  // Überprüfe, ob der Basis-Benutzername bereits existiert
+  let username = baseUsername;
+  let userExists = await User.findOne({ username });
+  let counter = 1;
+  
+  // Wenn der Benutzername existiert, füge eine Zahl hinzu und erhöhe sie, bis ein freier Name gefunden wird
+  while (userExists) {
+    username = `${baseUsername}${counter}`;
+    userExists = await User.findOne({ username });
+    counter++;
+  }
+  
+  return username;
+}
+
+/**
  * Verarbeitet den Google-Login oder erstellt einen neuen Nutzer
  * @param {Object} googleUserData - Die verifizierten Google-Nutzerdaten
  * @returns {Object} Nutzerdaten mit JWT-Token
@@ -42,12 +74,17 @@ async function processGoogleLogin(googleUserData) {
     let user = await User.findOne({ email: googleUserData.email });
     
     if (!user) {
+      // Einen einzigartigen Benutzernamen generieren
+      const username = await generateUniqueUsername(googleUserData.email, googleUserData.name);
+      
       // Neuen Nutzer erstellen, wenn er nicht existiert
       user = new User({
         email: googleUserData.email,
         name: googleUserData.name,
+        username: username, // Setze einen generierten Benutzernamen
         profilePicture: googleUserData.picture,
         googleId: googleUserData.googleId,
+        isVerified: googleUserData.emailVerified, // Auch isVerified setzen
         emailVerified: googleUserData.emailVerified,
         authProvider: 'google'
       });
@@ -58,6 +95,19 @@ async function processGoogleLogin(googleUserData) {
       if (!user.googleId) {
         user.googleId = googleUserData.googleId;
         user.authProvider = user.authProvider || 'google';
+        
+        // Wenn der Nutzer sich zuvor lokal registriert hat und keinen Benutzernamen hat,
+        // generiere einen
+        if (!user.username) {
+          user.username = await generateUniqueUsername(googleUserData.email, googleUserData.name);
+        }
+        
+        await user.save();
+      }
+      
+      // Bei einem bestehenden Nutzer setzen wir auch isVerified basierend auf Google's Email-Verifizierung
+      if (googleUserData.emailVerified && !user.isVerified) {
+        user.isVerified = true;
         await user.save();
       }
     }
@@ -70,7 +120,8 @@ async function processGoogleLogin(googleUserData) {
         id: user._id,
         name: user.name,
         email: user.email,
-        profilePicture: user.profilePicture
+        profilePicture: user.profilePicture,
+        isVerified: user.isVerified
       },
       token
     };
