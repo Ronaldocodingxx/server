@@ -4,6 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 
+
 // Env-Variablen laden
 dotenv.config();
 
@@ -61,7 +62,8 @@ app.get('/', (req, res) => {
     endpoints: [
       '/health',
       '/api/auth/*',
-      '/api/messages/*'
+      '/api/messages/*',
+      '/api/chats/*'  // Neuer Chat-Endpunkt hinzugefügt
     ]
   });
 });
@@ -88,6 +90,10 @@ app.use('/api/auth', googleAuthRoutes); // Neue Zeile für Google Auth
 // Neue Messages-Routen hinzufügen
 const messagesRoutes = require('./routes/messages');
 app.use('/api/messages', messagesRoutes);
+
+// Chat-Routen hinzufügen (NEU)
+const chatRoutes = require('./chats/routes/chat.routes');
+app.use('/api/chats', chatRoutes);
 
 // Statischen Ordner für Frontend-Dateien (falls benötigt)
 if (process.env.NODE_ENV === 'production') {
