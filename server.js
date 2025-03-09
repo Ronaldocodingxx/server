@@ -81,6 +81,70 @@ mongoose.connect(MONGO_URI)
     }, 5000);
   });
 
+// Token-Logging Middleware für Debugging
+const tokenLogger = (req, res, next) => {
+  console.log('---- TOKEN LOGGER MIDDLEWARE ----');
+  console.log('Request URL:', req.url);
+  console.log('Request Method:', req.method);
+  
+  // Authorization Header überprüfen
+  const authHeader = req.headers.authorization;
+  console.log('Authorization Header vorhanden:', !!authHeader);
+  
+  if (authHeader) {
+    // Token extrahieren (ohne es zu modifizieren)
+    const parts = authHeader.split(' ');
+    console.log('Authorization Header Format:', parts.length === 2 ? 'Korrekt (Bearer + Token)' : 'Inkorrekt');
+    
+    if (parts.length === 2) {
+      const [bearer, token] = parts;
+      console.log('Prefix:', bearer);
+      
+      // Nur die ersten und letzten 10 Zeichen des Tokens anzeigen (Sicherheit)
+      if (token.length > 20) {
+        const tokenPreview = token.substring(0, 10) + '...' + token.substring(token.length - 10);
+        console.log('Token (Ausschnitt):', tokenPreview);
+        console.log('Token Länge:', token.length);
+      } else {
+        console.log('Token zu kurz:', token.length);
+      }
+      
+      // Optionaler Teil: Basisanalyse des Tokens ohne Verifizierung
+      try {
+        if (token.split('.').length === 3) {
+          // Sieht wie ein JWT aus
+          const [header, payload] = token.split('.').slice(0, 2).map(part => {
+            // Basis64-URL zu Basis64 konvertieren (für Buffer.from)
+            const base64 = part.replace(/-/g, '+').replace(/_/g, '/');
+            // Padding hinzufügen wenn nötig
+            const paddedBase64 = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+            return JSON.parse(Buffer.from(paddedBase64, 'base64').toString());
+          });
+          console.log('Token Header:', header);
+          console.log('Token Payload (ohne Verifizierung):', payload);
+          
+          // Ablaufdatum prüfen
+          if (payload.exp) {
+            const expDate = new Date(payload.exp * 1000);
+            console.log('Token Ablaufdatum:', expDate);
+            console.log('Token abgelaufen?', expDate < new Date());
+          }
+          
+          // ID prüfen
+          console.log('Enthält id:', !!payload.id);
+          console.log('Enthält userId:', !!payload.userId);
+        }
+      } catch (e) {
+        console.log('Token-Analyse fehlgeschlagen:', e.message);
+      }
+    }
+  }
+  
+  console.log('-------------------------');
+  // Wichtig: next() aufrufen, um mit der nächsten Middleware fortzufahren
+  next();
+};
+
 // API-Routen
 const authRoutes = require('./routes/auth');
 const googleAuthRoutes = require('./routes/google-auth'); // Neue Zeile für Google Auth
@@ -91,9 +155,9 @@ app.use('/api/auth', googleAuthRoutes); // Neue Zeile für Google Auth
 const messagesRoutes = require('./routes/messages');
 app.use('/api/messages', messagesRoutes);
 
-// Chat-Routen hinzufügen (NEU)
+// Chat-Routen hinzufügen (NEU) - mit Token-Logger Middleware
 const chatRoutes = require('./chats/routes/chat.routes');
-app.use('/api/chats', chatRoutes);
+app.use('/api/chats', tokenLogger, chatRoutes); // Token-Logger vor Chat-Routen
 
 // Statischen Ordner für Frontend-Dateien (falls benötigt)
 if (process.env.NODE_ENV === 'production') {
