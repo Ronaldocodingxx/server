@@ -161,6 +161,88 @@ exports.getChatById = async (req, res) => {
   }
 };
 
+// NEUE FUNKTION: Ältere Nachrichten zu einem Chat abrufen
+exports.getMessages = async (req, res) => {
+  try {
+    const chatId = req.params.chatId;
+    const userId = req.userId;
+    const { beforeMessageId, limit = 20 } = req.query;
+
+    // Chat abrufen
+    const chat = await Chat.findById(chatId);
+
+    // Überprüfen, ob der Chat existiert
+    if (!chat) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chat nicht gefunden'
+      });
+    }
+
+    // Überprüfen, ob der Benutzer berechtigt ist, die Nachrichten zu sehen
+    if (!chat.isPublic && chat.creator.toString() !== userId && !chat.participants.includes(userId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung für diesen Chat'
+      });
+    }
+
+    // Nachrichten filtern (vor einer bestimmten Nachricht)
+    let filteredMessages = chat.messages;
+    
+    if (beforeMessageId) {
+      const referenceMessage = chat.messages.id(beforeMessageId);
+      if (!referenceMessage) {
+        return res.status(404).json({
+          success: false,
+          message: 'Referenznachricht nicht gefunden'
+        });
+      }
+      
+      // Nur Nachrichten nehmen, die vor der Referenznachricht liegen
+      filteredMessages = chat.messages.filter(msg => 
+        msg.timestamp < referenceMessage.timestamp
+      );
+    }
+    
+    // Sortieren und limitieren
+    filteredMessages = filteredMessages
+      .sort((a, b) => b.timestamp - a.timestamp) // Neueste zuerst
+      .slice(0, parseInt(limit));
+    
+    // Benutzernamen für jede Nachricht abrufen
+    const messagesWithUserDetails = await Promise.all(
+      filteredMessages.map(async (msg) => {
+        // Nur nicht gelöschte Nachrichten oder wenn der Benutzer der Ersteller ist
+        if (!msg.isDeleted || chat.creator.toString() === userId) {
+          // Benutzer für jede Nachricht abrufen
+          const user = await User.findById(msg.userId, 'username');
+          return {
+            id: msg._id,
+            chatId: chatId,
+            userId: msg.userId,
+            username: user ? user.username : 'Unbekannter Benutzer',
+            message: msg.isDeleted ? 'Diese Nachricht wurde gelöscht.' : msg.text,
+            isAI: msg.isAI || false,
+            timestamp: msg.timestamp
+          };
+        }
+      }).filter(Boolean) // Entferne null/undefined Werte
+    );
+
+    res.status(200).json({
+      success: true,
+      messages: messagesWithUserDetails
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Nachrichten',
+      error: error.message
+    });
+  }
+};
+
 // Nachricht zu einem Chat hinzufügen
 exports.addMessage = async (req, res) => {
   try {

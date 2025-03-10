@@ -18,6 +18,9 @@ router.delete('/:id', chatController.deleteChat);         // Löscht einen Chat 
 router.post('/:id/messages', chatController.addMessage);                    // Fügt eine Nachricht hinzu
 router.delete('/:chatId/messages/:messageId', chatController.deleteMessage); // Löscht eine Nachricht (nur Ersteller)
 
+// NEUE ROUTE: Holt Nachrichten mit optionalen Filtern für ältere Nachrichten
+router.get('/:chatId/messages', chatController.getMessages);  
+
 // Benutzer sperren
 router.post('/:chatId/ban/:userId', chatController.banUserFromChat);        // Sperrt einen Benutzer (nur Ersteller)
 
