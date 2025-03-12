@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const http = require('http'); // NEU: HTTP-Modul für WebSockets
+const { initWebSocket } = require('./WebSocket/websocket'); // NEU: WebSocket-Modul importieren
 
 
 // Env-Variablen laden
@@ -178,12 +180,19 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Server starten
+// NEU: Server mit HTTP-Modul erstellen (statt app.listen direkt)
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = http.createServer(app);
+
+// NEU: WebSocket-Server initialisieren durch Import des Moduls
+const io = initWebSocket(server);
+
+// NEU: Server starten (mit server.listen statt app.listen)
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server läuft auf Port ${PORT}`);
   console.log(`Umgebung: ${process.env.NODE_ENV || 'development'}`);
   console.log(`Health-Check verfügbar unter: /health`);
+  console.log('WebSocket-Server ist aktiv'); // NEU: WebSocket-Info
   
   // Überprüfe Umgebungsvariablen
   const envCheck = checkRequiredEnvVars();
