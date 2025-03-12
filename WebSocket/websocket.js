@@ -1,10 +1,9 @@
-// WebSocket/websocket.js - Mit Benutzer-Information und Socket-ID-Tracking
+// WebSocket/websocket.js - WebSocket-Funktionalität
 const { Server } = require('socket.io');
-const jwt = require('jsonwebtoken'); // Für Token-Verifikation
+const jwt = require('jsonwebtoken');
 
-// Aktive Chat-Verbindungen und Socket-zu-Benutzer-Mapping
+// Aktive Chat-Verbindungen nachverfolgen
 const activeChatUsers = new Map();
-const socketToUser = new Map(); // Speichert die Benutzerinformationen für jeden Socket
 
 /**
  * Initialisiert den WebSocket-Server
@@ -40,12 +39,6 @@ function initWebSocket(server) {
           // Benutzerinformationen am Socket speichern
           socket.userId = decoded.id || decoded.userId;
           socket.username = decoded.username || 'Benutzer';
-          
-          // In der Map speichern
-          socketToUser.set(socket.id, {
-            userId: socket.userId,
-            username: socket.username
-          });
           
           console.log(`Authentifizierter Benutzer ${socket.username} (${socket.userId}) verbunden`);
         } catch (err) {
@@ -113,13 +106,14 @@ function initWebSocket(server) {
         const { chatId, text, messageId } = data;
         if (!chatId || !text) return;
         
-        // Nachricht an alle ANDEREN Clients im Chat senden (nicht an den Absender)
+        // WICHTIGE ÄNDERUNG: socket.to statt io.to
+        // Sendet nur an andere Clients im Raum, nicht an den Absender
         socket.to(chatId).emit('message', {
           chatId,
           message: {
             id: messageId || 'temp-' + Date.now(),
-            userId: socket.userId || 'anonymous',
-            username: socket.username || 'Gast',
+            userId: socket.userId || 'unknown',
+            username: socket.username || 'Unbekannt',
             text: text,
             timestamp: new Date()
           }
@@ -134,9 +128,6 @@ function initWebSocket(server) {
     // Verbindung getrennt
     socket.on('disconnect', () => {
       console.log(`Socket ${socket.id} (${socket.username}) getrennt`);
-      
-      // Benutzerinformationen entfernen
-      socketToUser.delete(socket.id);
       
       // Benutzer aus allen aktiven Chat-Räumen entfernen
       for (const [chatId, users] of activeChatUsers.entries()) {
