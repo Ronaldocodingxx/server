@@ -104,7 +104,7 @@ router.post('/register', async (req, res) => {
         }
         
         // Sende Verifikations-E-Mail mit Hash in der URL
-        const verificationUrl = `https://frontend-r4x5k.ondigitalocean.app/#/verify-email?token=${verificationToken}`;
+        const verificationUrl = `https://deepepoch.ai/#/verify-email?token=${verificationToken}`;
         
         // Wenn E-Mail-Konfiguration vorhanden, dann normal fortfahren
         try {
@@ -282,7 +282,7 @@ router.post('/resend-verification', verificationLimiter, async (req, res) => {
         await user.save();
         
         // Sende Verifikations-E-Mail mit Hash in der URL
-        const verificationUrl = `https://frontend-r4x5k.ondigitalocean.app/#/verify-email?token=${verificationToken}`;
+        const verificationUrl = `https://deepepoch.ai/#/verify-email?token=${verificationToken}`;
         
         // Überprüfe E-Mail-Konfiguration
         if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
