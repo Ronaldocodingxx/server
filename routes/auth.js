@@ -430,7 +430,7 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
         await user.save();
         
         // Sende eine E-Mail mit dem Reset-Link mit Hash in der URL
-        const resetUrl = `https://frontend-r4x5k.ondigitalocean.app/#/reset-password?token=${resetToken}`;
+        const resetUrl = `https://deepepoch.ai/#/reset-password?token=${resetToken}`;
         
         // Überprüfe E-Mail-Konfiguration
         if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
