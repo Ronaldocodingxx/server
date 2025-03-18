@@ -36,12 +36,15 @@ const checkRequiredEnvVars = () => {
 const app = express();
 
 // CORS-Konfiguration
+// CORS-Konfiguration
 app.use(cors({
   origin: [
     'http://localhost:4200',                     // Lokale Entwicklung
     'https://frontend-r4x5k.ondigitalocean.app', // Digital Ocean Frontend
     'https://supperchat.com',                    // Eigene Domain
-    'https://www.supperchat.com'                 // Mit www-Präfix
+    'https://www.supperchat.com',                // Mit www-Präfix
+    'https://deepepoch.ai',                      // Neue Domain - hinzufügen
+    'https://www.deepepoch.ai'                   // Neue Domain mit www - hinzufügen
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
