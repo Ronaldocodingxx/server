@@ -378,58 +378,106 @@ router.post('/resend-verification', verificationLimiter, async (req, res) => {
     }
 });
 
-// DELETE-Route für Kontolöschung
-// DELETE-Route für Kontolöschung mit Chat-Löschung
+
+
+// DELETE-Route für Kontolöschung mit Chat-Löschung - verbesserte Version
+const mongoose = require('mongoose'); // Am Anfang der Datei importieren, nicht innerhalb der Route
+
 router.delete('/delete-account/:id', verifyToken, async (req, res) => {
     try {
         const userId = req.params.id;
+        console.log(`Beginne Löschung des Benutzerkontos: ${userId}`);
         
         // Überprüfen, ob der eingeloggte Benutzer sein eigenes Konto löscht
         if (req.userId !== userId) {
+            console.log(`Unberechtigter Löschversuch: Token-ID ${req.userId} vs. Param-ID ${userId}`);
             return res.status(403).json({ 
+                success: false,
                 message: 'Sie sind nicht berechtigt, dieses Konto zu löschen.' 
             });
         }
         
-        // Mongoose importieren, falls noch nicht geschehen
-        const mongoose = require('mongoose');
-        
-        // ObjectId für MongoDB-Operationen erstellen
-        const userObjectId = mongoose.Types.ObjectId(userId);
-        
+        // Sicherstellen, dass userId ein gültiges ObjectID-Format hat
+        let userObjectId;
         try {
-            // 1. Erst alle Chats des Benutzers finden und löschen
-            const chatsCollection = mongoose.connection.collection('chats');
+            userObjectId = new mongoose.Types.ObjectId(userId);
+        } catch (idError) {
+            console.error(`Ungültige Benutzer-ID: ${userId}`, idError);
+            return res.status(400).json({
+                success: false,
+                message: 'Ungültige Benutzer-ID'
+            });
+        }
+        
+        // 1. Erst alle Chats des Benutzers finden und löschen
+        try {
+            // Direkt auf das Chat-Schema zugreifen, falls vorhanden
+            const Chat = mongoose.model('Chat');
+            console.log(`Suche und lösche Chats für Benutzer: ${userId}`);
             
             // Alle Chats löschen, bei denen der Benutzer der Ersteller ist
-            const deleteChatsResult = await chatsCollection.deleteMany({ 
-                creator: userObjectId 
-            });
-            
+            const deleteChatsResult = await Chat.deleteMany({ creator: userObjectId });
             console.log(`${deleteChatsResult.deletedCount} Chats des Benutzers ${userId} wurden gelöscht`);
             
             // 2. Dann den Benutzer selbst löschen
             const deletedUser = await User.findByIdAndDelete(userId);
             
             if (!deletedUser) {
-                return res.status(404).json({ message: 'Benutzer nicht gefunden.' });
+                console.log(`Benutzer nicht gefunden: ${userId}`);
+                return res.status(404).json({ 
+                    success: false,
+                    message: 'Benutzer nicht gefunden.' 
+                });
             }
             
+            console.log(`Benutzer ${userId} erfolgreich gelöscht`);
             res.status(200).json({ 
                 success: true,
                 message: 'Konto und alle zugehörigen Chats erfolgreich gelöscht.',
                 deletedChatsCount: deleteChatsResult.deletedCount
             });
         } catch (dbError) {
-            console.error('Fehler beim Löschen von Chats oder Benutzer:', dbError);
-            res.status(500).json({
-                success: false, 
-                message: 'Fehler beim Löschen von Chats oder Benutzer.',
-                error: dbError.message
-            });
+            console.error(`DB-Fehler beim Löschen von Chats/Benutzer: ${userId}`, dbError);
+            
+            // Alternative Methode mit direktem Collection-Zugriff versuchen
+            try {
+                console.log("Versuche alternative Löschmethode mit direktem Collection-Zugriff...");
+                const chatsCollection = mongoose.connection.collection('chats');
+                const deleteChatsResult = await chatsCollection.deleteMany({ 
+                    creator: userObjectId 
+                });
+                console.log(`Alternative Methode: ${deleteChatsResult.deletedCount} Chats gelöscht`);
+                
+                const usersCollection = mongoose.connection.collection('users');
+                const deleteUserResult = await usersCollection.deleteOne({ 
+                    _id: userObjectId 
+                });
+                
+                if (deleteUserResult.deletedCount === 1) {
+                    console.log(`Alternative Methode: Benutzer ${userId} erfolgreich gelöscht`);
+                    return res.status(200).json({ 
+                        success: true,
+                        message: 'Konto und alle zugehörigen Chats erfolgreich gelöscht (alternative Methode).',
+                        deletedChatsCount: deleteChatsResult.deletedCount
+                    });
+                } else {
+                    console.log(`Alternative Methode: Benutzer ${userId} nicht gefunden`);
+                    return res.status(404).json({ 
+                        success: false,
+                        message: 'Benutzer nicht gefunden (alternative Methode).' 
+                    });
+                }
+            } catch (altError) {
+                console.error("Auch alternative Löschmethode fehlgeschlagen:", altError);
+                return res.status(500).json({
+                    success: false, 
+                    message: 'Fehler beim Löschen von Chats oder Benutzer.',
+                    error: altError.message
+                });
+            }
         }
     } catch (error) {
-        console.error('Fehler beim Löschen des Kontos:', error);
+        console.error('Allgemeiner Fehler beim Löschen des Kontos:', error);
         res.status(500).json({ 
             success: false,
             message: 'Ein Fehler ist beim Löschen des Kontos aufgetreten.',
