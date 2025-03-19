@@ -379,6 +379,7 @@ router.post('/resend-verification', verificationLimiter, async (req, res) => {
 });
 
 // DELETE-Route für Kontolöschung
+// DELETE-Route für Kontolöschung mit Chat-Löschung
 router.delete('/delete-account/:id', verifyToken, async (req, res) => {
     try {
         const userId = req.params.id;
@@ -390,20 +391,47 @@ router.delete('/delete-account/:id', verifyToken, async (req, res) => {
             });
         }
         
-        // Benutzer in der Datenbank finden und löschen
-        const deletedUser = await User.findByIdAndDelete(userId);
+        // Mongoose importieren, falls noch nicht geschehen
+        const mongoose = require('mongoose');
         
-        if (!deletedUser) {
-            return res.status(404).json({ message: 'Benutzer nicht gefunden.' });
+        // ObjectId für MongoDB-Operationen erstellen
+        const userObjectId = mongoose.Types.ObjectId(userId);
+        
+        try {
+            // 1. Erst alle Chats des Benutzers finden und löschen
+            const chatsCollection = mongoose.connection.collection('chats');
+            
+            // Alle Chats löschen, bei denen der Benutzer der Ersteller ist
+            const deleteChatsResult = await chatsCollection.deleteMany({ 
+                creator: userObjectId 
+            });
+            
+            console.log(`${deleteChatsResult.deletedCount} Chats des Benutzers ${userId} wurden gelöscht`);
+            
+            // 2. Dann den Benutzer selbst löschen
+            const deletedUser = await User.findByIdAndDelete(userId);
+            
+            if (!deletedUser) {
+                return res.status(404).json({ message: 'Benutzer nicht gefunden.' });
+            }
+            
+            res.status(200).json({ 
+                success: true,
+                message: 'Konto und alle zugehörigen Chats erfolgreich gelöscht.',
+                deletedChatsCount: deleteChatsResult.deletedCount
+            });
+        } catch (dbError) {
+            console.error('Fehler beim Löschen von Chats oder Benutzer:', dbError);
+            res.status(500).json({
+                success: false, 
+                message: 'Fehler beim Löschen von Chats oder Benutzer.',
+                error: dbError.message
+            });
         }
-        
-        res.status(200).json({ 
-            success: true,
-            message: 'Konto erfolgreich gelöscht.' 
-        });
     } catch (error) {
         console.error('Fehler beim Löschen des Kontos:', error);
         res.status(500).json({ 
+            success: false,
             message: 'Ein Fehler ist beim Löschen des Kontos aufgetreten.',
             error: error.message
         });
