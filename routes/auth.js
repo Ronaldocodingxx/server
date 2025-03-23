@@ -325,9 +325,9 @@ router.post('/resend-verification', verificationLimiter, async (req, res) => {
             await transporter.verify();
 
             await transporter.sendMail({
-                from: '"SyntheChat" <' + process.env.EMAIL_USER + '>',
+                from: '"DeepEpoch" <' + process.env.EMAIL_USER + '>',
                 to: email,
-                subject: 'E-Mail-Verifizierung für SyntheChat',
+                subject: 'E-Mail-Verifizierung für DeepEpoch',
                 html: `
                     <h2>Willkommen bei DeepEpoch!</h2>
                     <p>Bitte klicken Sie auf den folgenden Link, um Ihre E-Mail-Adresse zu verifizieren:</p>
