@@ -329,7 +329,7 @@ router.post('/resend-verification', verificationLimiter, async (req, res) => {
                 to: email,
                 subject: 'E-Mail-Verifizierung für SyntheChat',
                 html: `
-                    <h2>Willkommen bei SyntheChat!</h2>
+                    <h2>Willkommen bei DeepEpoch!</h2>
                     <p>Bitte klicken Sie auf den folgenden Link, um Ihre E-Mail-Adresse zu verifizieren:</p>
                     <a href="${verificationUrl}">E-Mail verifizieren</a>
                     <p>Aus Sicherheitsgründen können Sie maximal 2 Verifizierungs-E-Mails innerhalb von ${COOLDOWN_MINUTES} Minuten anfordern.</p>
