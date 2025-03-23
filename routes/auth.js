@@ -533,9 +533,9 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
             await transporter.verify();
 
             await transporter.sendMail({
-                from: '"SyntheChat" <' + process.env.EMAIL_USER + '>',
+                from: '"DeepEpoch" <' + process.env.EMAIL_USER + '>',
                 to: email,
-                subject: 'Passwort zurücksetzen für SyntheChat',
+                subject: 'Passwort zurücksetzen für DeepEpoch',
                 html: `
                     <h2>Passwort zurücksetzen</h2>
                     <p>Sie haben eine Anfrage zum Zurücksetzen Ihres Passworts gestellt.</p>
