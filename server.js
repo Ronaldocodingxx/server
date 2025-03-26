@@ -3,8 +3,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
-const http = require('http'); // NEU: HTTP-Modul für WebSockets
-const { initWebSocket } = require('./WebSocket/websocket'); // NEU: WebSocket-Modul importieren
+const http = require('http'); // HTTP-Modul für WebSockets
+const { initWebSocket } = require('./WebSocket/websocket'); // WebSocket-Modul importieren
 
 
 // Env-Variablen laden
@@ -36,7 +36,6 @@ const checkRequiredEnvVars = () => {
 const app = express();
 
 // CORS-Konfiguration
-// CORS-Konfiguration
 app.use(cors({
   origin: [
     'http://localhost:4200',                     // Lokale Entwicklung
@@ -51,7 +50,7 @@ app.use(cors({
 }));
 
 // JSON- und URL-kodierte Bodies verarbeiten
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Erhöhtes Limit für Base64-Bilder
 app.use(express.urlencoded({ extended: true }));
 
 // Health Check Route
@@ -68,7 +67,8 @@ app.get('/', (req, res) => {
       '/health',
       '/api/auth/*',
       '/api/messages/*',
-      '/api/chats/*'  // Neuer Chat-Endpunkt hinzugefügt
+      '/api/chats/*',
+      '/api/profiles/*'  // NEU: Profil-Endpunkt hinzugefügt
     ]
   });
 });
@@ -152,17 +152,24 @@ const tokenLogger = (req, res, next) => {
 
 // API-Routen
 const authRoutes = require('./routes/auth');
-const googleAuthRoutes = require('./routes/google-auth'); // Neue Zeile für Google Auth
+const googleAuthRoutes = require('./routes/google-auth');
 app.use('/api/auth', authRoutes);
-app.use('/api/auth', googleAuthRoutes); // Neue Zeile für Google Auth
+app.use('/api/auth', googleAuthRoutes);
 
-// Neue Messages-Routen hinzufügen
+// Messages-Routen
 const messagesRoutes = require('./routes/messages');
 app.use('/api/messages', messagesRoutes);
 
-// Chat-Routen hinzufügen (NEU) - mit Token-Logger Middleware
+// Chat-Routen
 const chatRoutes = require('./chats/routes/chat.routes');
-app.use('/api/chats', tokenLogger, chatRoutes); // Token-Logger vor Chat-Routen
+app.use('/api/chats', tokenLogger, chatRoutes);
+
+// NEU: Profil-Routen hinzufügen
+const profileRoutes = require('./profiles/routes/profile.routes');
+app.use('/api/profiles', tokenLogger, profileRoutes);
+
+// NEU: Statischen Ordner für Profilbilder bereitstellen
+app.use('/uploads/profileImages', express.static(path.join(__dirname, 'uploads/profileImages')));
 
 // Statischen Ordner für Frontend-Dateien (falls benötigt)
 if (process.env.NODE_ENV === 'production') {
@@ -183,19 +190,20 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// NEU: Server mit HTTP-Modul erstellen (statt app.listen direkt)
+// Server mit HTTP-Modul erstellen (statt app.listen direkt)
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 
-// NEU: WebSocket-Server initialisieren durch Import des Moduls
+// WebSocket-Server initialisieren durch Import des Moduls
 const io = initWebSocket(server);
 
-// NEU: Server starten (mit server.listen statt app.listen)
+// Server starten (mit server.listen statt app.listen)
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server läuft auf Port ${PORT}`);
   console.log(`Umgebung: ${process.env.NODE_ENV || 'development'}`);
   console.log(`Health-Check verfügbar unter: /health`);
-  console.log('WebSocket-Server ist aktiv'); // NEU: WebSocket-Info
+  console.log('WebSocket-Server ist aktiv');
+  console.log('Profilbild-System ist aktiv'); // NEU: Profilbild-Info
   
   // Überprüfe Umgebungsvariablen
   const envCheck = checkRequiredEnvVars();
