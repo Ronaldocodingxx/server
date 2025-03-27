@@ -13,16 +13,20 @@ const verifyToken = require('../../middleware/auth');
 // Eigenes Profil abrufen
 router.get('/me', verifyToken, profileController.getProfile);
 
-// Profil eines bestimmten Benutzers abrufen
-router.get('/:userId', profileController.getProfile);
-
+// WICHTIG: Spezifische Route vor allgemeiner Route definieren!
 // NEU: Nur das Profilbild eines Benutzers abrufen (öffentlich)
 router.get('/avatar/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
     
+    // Debug-Log
+    console.log(`Avatar-Anfrage für Benutzer ${userId}`);
+    
     // Profil suchen
     const profile = await Profile.findOne({ user: userId });
+    
+    // Debug-Log
+    console.log(`Profil gefunden: ${!!profile}, Hat Bild: ${!!(profile && profile.profileImage)}`);
     
     if (!profile || !profile.profileImage) {
       return res.status(404).json({ message: 'Kein Profilbild gefunden' });
@@ -34,6 +38,7 @@ router.get('/avatar/:userId', async (req, res) => {
     if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       imageUrl = `${baseUrl}/uploads/profileImages/${path.basename(imageUrl)}`;
+      console.log(`Konvertierte Bild-URL: ${imageUrl}`);
     }
     
     // Cache-Header setzen (24 Stunden)
@@ -46,6 +51,9 @@ router.get('/avatar/:userId', async (req, res) => {
     res.status(500).json({ message: 'Serverfehler beim Abrufen des Profilbilds' });
   }
 });
+
+// DANN: Profil eines bestimmten Benutzers abrufen (allgemeinere Route)
+router.get('/:userId', profileController.getProfile);
 
 // Profilbild hochladen (Datei-Upload)
 router.post(
