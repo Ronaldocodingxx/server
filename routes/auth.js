@@ -8,7 +8,7 @@ const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
 const verifyToken = require('../middleware/auth'); // Importieren der Middleware
 
-// Rate-Limiter für Verifizierungsanfragen (pro IP)
+// Rate-Limiter für Verifizierungsanfragen (pro IP) test
 const verificationLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 Stunde
     max: 5, // max 5 Anfragen pro IP pro Stunde
