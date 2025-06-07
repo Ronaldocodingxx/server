@@ -14,7 +14,7 @@ const profileSchema = new mongoose.Schema({
   },
   profileText: {
     type: String,
-    default: 'Willkommen auf meinem Profil! Hier findest du alle meine erstellten Chats.',
+    default: 'NEU',
     maxlength: [2000, 'Der Profiltext darf maximal 2000 Zeichen lang sein.'] // Maximallänge hinzugefügt
   },
   chats: {
