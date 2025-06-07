@@ -35,18 +35,42 @@ const checkRequiredEnvVars = () => {
 // Express-App erstellen
 const app = express();
 
-// CORS-Konfiguration
+// CORS-Konfiguration - AKTUALISIERT FÜR CORDOVA
 app.use(cors({
-  origin: [
-    'http://localhost:4200',
-    'https://neufrontend-ptfjz.ondigitalocean.app', // Deine aktuelle Frontend-URL
-    'https://supperchat.com',
-    'https://www.supperchat.com',
-    'https://deepepoch.ai',
-    'https://www.deepepoch.ai'
-  ],
+  origin: function (origin, callback) {
+    // Liste erlaubter Origins
+    const allowedOrigins = [
+      'http://localhost:4200',
+      'https://neufrontend-ptfjz.ondigitalocean.app',
+      'https://supperchat.com',
+      'https://www.supperchat.com',
+      'https://deepepoch.ai',
+      'https://www.deepepoch.ai',
+      'http://localhost:8080',  // Cordova Browser
+      'http://10.0.2.2:8080',   // Android Emulator
+      'http://localhost:*',      // Alle localhost Ports
+      'file://',                 // Cordova File Protocol
+      'http://localhost'         // Cordova iOS
+    ];
+    
+    // Cordova sendet manchmal keinen Origin-Header
+    if (!origin) return callback(null, true);
+    
+    // Prüfe ob Origin erlaubt ist
+    if (allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+      return callback(null, true);
+    }
+    
+    // Für Entwicklung: Alle Origins erlauben
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true  // Wichtig für Cookies/Sessions
 }));
 
 // JSON- und URL-kodierte Bodies verarbeiten
