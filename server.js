@@ -50,14 +50,25 @@ app.use(cors({
       'http://10.0.2.2:8080',   // Android Emulator
       'http://localhost:*',      // Alle localhost Ports
       'file://',                 // Cordova File Protocol
-      'http://localhost'         // Cordova iOS
+      'http://localhost',        // Cordova iOS
+      'https://localhost',       // ← NEU HINZUGEFÜGT! Cordova Android HTTPS
+      'https://localhost:*'      // ← NEU! Alle HTTPS localhost Ports
     ];
     
     // Cordova sendet manchmal keinen Origin-Header
     if (!origin) return callback(null, true);
     
     // Prüfe ob Origin erlaubt ist
-    if (allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+    if (allowedOrigins.some(allowed => {
+      // Exakte Übereinstimmung oder Wildcard-Check
+      if (allowed.includes('*')) {
+        // Ersetze * mit einem Regex-Pattern
+        const pattern = allowed.replace('*', '.*');
+        const regex = new RegExp(`^${pattern}$`);
+        return regex.test(origin);
+      }
+      return origin === allowed || origin.startsWith(allowed);
+    })) {
       return callback(null, true);
     }
     
@@ -65,6 +76,9 @@ app.use(cors({
     if (process.env.NODE_ENV === 'development') {
       return callback(null, true);
     }
+    
+    // Log für Debugging in Production
+    console.log('CORS blocked origin:', origin);
     
     callback(new Error('Not allowed by CORS'));
   },
