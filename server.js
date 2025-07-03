@@ -4,8 +4,8 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const http = require('http'); // HTTP-Modul für WebSockets
-const { initWebSocket } = require('./WebSocket/websocket'); // WebSocket-Modul importieren
-
+const { initWebSocket } = require('./WebSocket/websocket'); // Bestehendes WebSocket-Modul
+const { initChatWebSocketV2 } = require('./WebSocket/chat-websocket'); // NEU: V2 WebSocket-Modul
 
 // Env-Variablen laden
 dotenv.config();
@@ -93,7 +93,14 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health Check Route
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', message: 'Server is running' });
+  res.status(200).json({ 
+    status: 'OK', 
+    message: 'Server is running',
+    websocket: {
+      v1: 'active',
+      v2: 'active on /chat-v2'
+    }
+  });
 });
 
 // Root-Route
@@ -106,8 +113,12 @@ app.get('/', (req, res) => {
       '/api/auth/*',
       '/api/messages/*',
       '/api/chats/*',
-      '/api/profiles/*'  // NEU: Profil-Endpunkt hinzugefügt
-    ]
+      '/api/profiles/*'
+    ],
+    websocket: {
+      v1: 'Standard WebSocket System',
+      v2: 'Erweitertes Chat System auf /chat-v2'
+    }
   });
 });
 
@@ -232,21 +243,36 @@ if (process.env.NODE_ENV === 'production') {
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 
-// WebSocket-Server initialisieren durch Import des Moduls
+// === WEBSOCKET INITIALISIERUNG ===
+// 1. Bestehendes WebSocket-System (bleibt unverändert)
 const io = initWebSocket(server);
+
+// 2. NEU: Erweitertes Chat-WebSocket V2 System
+try {
+  const chatNamespaceV2 = initChatWebSocketV2(io);
+  console.log('✅ Chat-WebSocket V2 System aktiviert');
+} catch (error) {
+  console.error('❌ Fehler beim Initialisieren von Chat-WebSocket V2:', error);
+}
 
 // Server starten (mit server.listen statt app.listen)
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server läuft auf Port ${PORT}`);
-  console.log(`Umgebung: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Health-Check verfügbar unter: /health`);
-  console.log('WebSocket-Server ist aktiv');
-  console.log('Profilbild-System ist aktiv'); // NEU: Profilbild-Info
+  console.log('===========================================');
+  console.log(`🚀 Server läuft auf Port ${PORT}`);
+  console.log(`📍 Umgebung: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`❤️  Health-Check: http://localhost:${PORT}/health`);
+  console.log('===========================================');
+  console.log('📡 WebSocket Systeme:');
+  console.log('   ✅ V1 (Standard): ws://localhost:' + PORT);
+  console.log('   ✅ V2 (Erweitert): ws://localhost:' + PORT + '/chat-v2');
+  console.log('===========================================');
+  console.log('🖼️  Profilbild-System ist aktiv');
+  console.log('===========================================');
   
   // Überprüfe Umgebungsvariablen
   const envCheck = checkRequiredEnvVars();
   if (!envCheck) {
-    console.warn('Server läuft, aber einige Funktionen könnten aufgrund fehlender Umgebungsvariablen nicht richtig funktionieren.');
+    console.warn('⚠️  Server läuft, aber einige Funktionen könnten aufgrund fehlender Umgebungsvariablen nicht richtig funktionieren.');
   }
 });
 
