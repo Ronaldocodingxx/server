@@ -1,6 +1,28 @@
 const Chat = require('../models/chat.model');
 const User = require('../../models/User'); // Korrigierter Pfad zum User-Modell
-const { getIO } = require('../../WebSocket/websocket'); // NEU - WebSocket import
+
+// SICHERER WebSocket Import mit Fehlerbehandlung
+let getIO;
+try {
+  // Versuche verschiedene Pfade
+  try {
+    getIO = require('../../WebSocket/websocket').getIO;
+  } catch (e1) {
+    try {
+      getIO = require('../../../WebSocket/websocket').getIO;
+    } catch (e2) {
+      try {
+        getIO = require('../../websocket').getIO;
+      } catch (e3) {
+        console.warn('⚠️ WebSocket getIO nicht gefunden - WebSocket Features deaktiviert');
+        getIO = null;
+      }
+    }
+  }
+} catch (error) {
+  console.warn('⚠️ WebSocket Import fehlgeschlagen:', error.message);
+  getIO = null;
+}
 
 // Chat erstellen
 exports.createChat = async (req, res) => {
@@ -309,7 +331,7 @@ exports.addMessage = async (req, res) => {
     });
 
     // NEU: WebSocket Broadcast wenn tempId vorhanden
-    if (tempId) {
+    if (tempId && getIO) {
       try {
         const io = getIO();
         
@@ -352,6 +374,8 @@ exports.addMessage = async (req, res) => {
         // WebSocket Fehler nicht kritisch - REST API funktioniert trotzdem
         console.error('WebSocket Broadcast Fehler:', wsError);
       }
+    } else if (tempId && !getIO) {
+      console.warn('⚠️ WebSocket nicht verfügbar - Nachricht wurde gespeichert aber nicht gebroadcastet');
     }
 
   } catch (error) {
