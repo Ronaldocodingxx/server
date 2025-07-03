@@ -1,5 +1,6 @@
 const Chat = require('../models/chat.model');
 const User = require('../../models/User'); // Korrigierter Pfad zum User-Modell
+const { getIO } = require('../../WebSocket/websocket'); // NEU - WebSocket import
 
 // Chat erstellen
 exports.createChat = async (req, res) => {
@@ -243,12 +244,12 @@ exports.getMessages = async (req, res) => {
   }
 };
 
-// Nachricht zu einem Chat hinzufügen
+// Nachricht zu einem Chat hinzufügen - ERWEITERTE VERSION
 exports.addMessage = async (req, res) => {
   try {
     const chatId = req.params.id;
     const userId = req.userId;
-    const { text } = req.body;
+    const { text, tempId } = req.body; // NEU: tempId aus dem Body holen
 
     if (!text || text.trim() === '') {
       return res.status(400).json({
@@ -289,20 +290,70 @@ exports.addMessage = async (req, res) => {
     chat.messages.push(newMessage);
     await chat.save();
 
-    // Benutzername für die Antwort abrufen
-    const user = await User.findById(userId, 'username');
+    // Die gespeicherte Nachricht (mit MongoDB _id)
+    const savedMessage = chat.messages[chat.messages.length - 1];
 
-    // Antwort senden
+    // Benutzername für die Antwort abrufen
+    const user = await User.findById(userId, 'username profilePicture');
+
+    // Standard Response (funktioniert weiter wie bisher!)
     res.status(201).json({
       success: true,
       message: {
-        _id: chat.messages[chat.messages.length - 1]._id,
+        _id: savedMessage._id,
         userId,
         username: user ? user.username : 'Unbekannter Benutzer',
         text,
-        timestamp: newMessage.timestamp
+        timestamp: savedMessage.timestamp
       }
     });
+
+    // NEU: WebSocket Broadcast wenn tempId vorhanden
+    if (tempId) {
+      try {
+        const io = getIO();
+        
+        // Nachricht mit Benutzerdetails für WebSocket
+        const broadcastMessage = {
+          _id: savedMessage._id,
+          sender: {
+            _id: userId,
+            username: user ? user.username : 'Unbekannter Benutzer',
+            profilePicture: user ? user.profilePicture : null
+          },
+          text: savedMessage.text,
+          timestamp: savedMessage.timestamp,
+          isAI: false
+        };
+        
+        // An alle im Chat-Room senden (V1)
+        io.to(chatId).emit('newMessage', {
+          chatId,
+          message: broadcastMessage,
+          tempId: tempId
+        });
+        
+        // An V2 Namespace senden
+        try {
+          const chatV2 = io.of('/chat-v2');
+          if (chatV2) {
+            chatV2.to(chatId).emit('newMessage', {
+              chatId,
+              message: broadcastMessage,
+              tempId: tempId
+            });
+          }
+        } catch (v2Error) {
+          console.log('V2 Namespace noch nicht verfügbar');
+        }
+        
+        console.log(`✅ Nachricht gebroadcastet mit tempId: ${tempId}`);
+      } catch (wsError) {
+        // WebSocket Fehler nicht kritisch - REST API funktioniert trotzdem
+        console.error('WebSocket Broadcast Fehler:', wsError);
+      }
+    }
+
   } catch (error) {
     res.status(500).json({
       success: false,
