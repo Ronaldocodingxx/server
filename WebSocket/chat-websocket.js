@@ -1,11 +1,160 @@
 // WebSocket/chat-websocket.js - Erweitertes WebSocket System V2
 const jwt = require('jsonwebtoken');
-const Chat = require('../chats/models/Chat');
-const User = require('../models/User');
-const mongoose = require('mongoose');
+// WICHTIG: Kommentiere diese Zeilen aus, bis wir die richtige Struktur kennen!
+// const Chat = require('../chats/models/Chat');
+// const User = require('../models/User');
+// const mongoose = require('mongoose');
 
 // Separater Namespace für das neue System
 let chatNamespace;
+
+/**
+ * Initialisiert das erweiterte Chat-WebSocket-System
+ * Läuft PARALLEL zum bestehenden System auf einem anderen Namespace
+ * @param {object} io - Socket.io-Server-Instanz vom Hauptsystem
+ */
+function initChatWebSocketV2(io) {
+  console.log('🚀 Initialisiere erweitertes Chat-WebSocket-System V2...');
+  
+  // Erstelle separaten Namespace für V2
+  chatNamespace = io.of('/chat-v2');
+  
+  // Authentifizierung für V2 Namespace
+  chatNamespace.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth.token;
+      
+      if (!token) {
+        return next(new Error('Kein Token vorhanden'));
+      }
+      
+      // Token verifizieren
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.userId = decoded.id || decoded.userId || decoded._id;
+      socket.username = decoded.username || decoded.email || 'Unknown';
+      
+      console.log(`✅ V2 User authentifiziert: ${socket.username} (${socket.userId})`);
+      next();
+      
+    } catch (error) {
+      console.error('V2 Auth Fehler:', error.message);
+      next(new Error('Authentifizierung fehlgeschlagen'));
+    }
+  });
+
+  // V2 Connection Handler
+  chatNamespace.on('connection', async (socket) => {
+    console.log(`=== NEUE V2 VERBINDUNG ===`);
+    console.log(`Socket ID: ${socket.id}`);
+    console.log(`User: ${socket.username} (${socket.userId})`);
+
+    // === CHAT ROOM MANAGEMENT ===
+    socket.on('joinChat', async (chatId) => {
+      try {
+        console.log(`📌 V2: User ${socket.userId} joining Chat ${chatId}`);
+        
+        // TEMPORÄR: Ohne DB-Validierung
+        socket.join(chatId);
+        socket.emit('joinedChat', { chatId, success: true });
+        
+        console.log(`✅ V2: User joined Chat ${chatId}`);
+        
+      } catch (error) {
+        console.error('V2 Join Error:', error);
+        socket.emit('error', { message: 'Fehler beim Beitreten' });
+      }
+    });
+
+    socket.on('leaveChat', (chatId) => {
+      console.log(`📤 V2: User ${socket.userId} leaving Chat ${chatId}`);
+      socket.leave(chatId);
+    });
+
+    // === NEUE NACHRICHT MIT TEMPID SUPPORT ===
+    socket.on('sendMessage', async (data) => {
+      console.log('=== V2 NACHRICHT EMPFANGEN ===');
+      console.log('Von:', socket.username);
+      console.log('Data:', JSON.stringify(data, null, 2));
+      
+      const { chatId, text, tempId } = data;
+      
+      // Validierung
+      if (!chatId || !text || !tempId) {
+        return socket.emit('messageError', { 
+          tempId,
+          error: 'Fehlende Daten (chatId, text oder tempId)' 
+        });
+      }
+
+      try {
+        // TEMPORÄR: Simuliere DB-Speicherung ohne echte DB
+        const newMessage = {
+          _id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          userId: socket.userId,
+          username: socket.username,
+          text: text.trim(),
+          isAI: false,
+          isDeleted: false,
+          timestamp: new Date()
+        };
+
+        console.log(`✅ V2: Nachricht "gespeichert": ${newMessage._id}`);
+
+        // An alle im Chat senden (MIT tempId!)
+        chatNamespace.to(chatId).emit('newMessage', {
+          chatId: chatId,
+          message: newMessage,
+          tempId: tempId // KRITISCH: Frontend braucht das zum Ersetzen!
+        });
+
+        // Bestätigung an Sender
+        socket.emit('messageSent', {
+          chatId,
+          messageId: newMessage._id,
+          tempId,
+          timestamp: newMessage.timestamp
+        });
+
+        console.log(`📤 V2: Nachricht an alle gesendet mit tempId: ${tempId}`);
+
+      } catch (error) {
+        console.error('❌ V2 Message Error:', error);
+        socket.emit('messageError', { 
+          tempId,
+          error: error.message || 'Fehler beim Senden' 
+        });
+      }
+    });
+
+    // === TYPING INDICATOR ===
+    socket.on('typing', (data) => {
+      const { chatId, isTyping } = data;
+      
+      // An alle ANDEREN im Chat
+      socket.to(chatId).emit('userTyping', {
+        userId: socket.userId,
+        username: socket.username,
+        isTyping
+      });
+    });
+
+    // === DISCONNECT ===
+    socket.on('disconnect', () => {
+      console.log(`❌ V2: User ${socket.username} disconnected`);
+    });
+
+    // === ERROR HANDLING ===
+    socket.on('error', (error) => {
+      console.error('V2 Socket Error:', error);
+    });
+  });
+
+  console.log('✅ Chat-WebSocket V2 System initialisiert auf /chat-v2');
+  return chatNamespace;
+}
+
+// Export
+module.exports = { initChatWebSocketV2 };
 
 /**
  * Initialisiert das erweiterte Chat-WebSocket-System
