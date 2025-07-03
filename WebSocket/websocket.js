@@ -1,151 +1,160 @@
-// WebSocket/websocket.js - WebSocket-Funktionalität
-const { Server } = require('socket.io');
+// WebSocket/websocket.js
+const socketIO = require('socket.io');
 const jwt = require('jsonwebtoken');
 
-// Aktive Chat-Verbindungen nachverfolgen
-const activeChatUsers = new Map();
+// Globale Variable für Socket.IO Instanz
+let ioInstance = null;
 
-/**
- * Initialisiert den WebSocket-Server
- * @param {object} server - HTTP-Server-Instanz
- * @returns {object} io - Socket.io-Server-Instanz
- */
+// WebSocket-Server initialisieren
 function initWebSocket(server) {
-  const io = new Server(server, {
+  console.log('WebSocket-Server initialisiert');
+  
+  const io = socketIO(server, {
     cors: {
-      origin: [
-        'http://localhost:4200',
-        'https://frontend-r4x5k.ondigitalocean.app',
-        'https://supperchat.com',
-        'https://www.supperchat.com'
-      ],
-      methods: ['GET', 'POST'],
+      origin: function (origin, callback) {
+        // Erlaubte Origins (gleiche wie in server.js)
+        const allowedOrigins = [
+          'http://localhost:4200',
+          'https://neufrontend-ptfjz.ondigitalocean.app',
+          'https://supperchat.com',
+          'https://www.supperchat.com',
+          'https://deepepoch.ai',
+          'https://www.deepepoch.ai',
+          'http://localhost:8080',
+          'http://10.0.2.2:8080',
+          'http://localhost:*',
+          'file://',
+          'http://localhost',
+          'https://localhost',
+          'https://localhost:*'
+        ];
+        
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.some(allowed => {
+          if (allowed.includes('*')) {
+            const pattern = allowed.replace('*', '.*');
+            const regex = new RegExp(`^${pattern}$`);
+            return regex.test(origin);
+          }
+          return origin === allowed || origin.startsWith(allowed);
+        })) {
+          return callback(null, true);
+        }
+        
+        if (process.env.NODE_ENV === 'development') {
+          return callback(null, true);
+        }
+        
+        console.log('WebSocket CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      },
+      methods: ["GET", "POST"],
       credentials: true
     }
   });
 
-  // WebSocket-Authentifizierung
-  io.use((socket, next) => {
+  // WICHTIG: Speichere die IO Instanz
+  ioInstance = io;
+
+  // Authentifizierungs-Middleware
+  io.use(async (socket, next) => {
     try {
-      // Token aus Handshake-Daten extrahieren
-      const token = socket.handshake.auth.token || 
-                   socket.handshake.headers.authorization?.replace('Bearer ', '');
+      const token = socket.handshake.auth.token;
       
-      if (token) {
-        // Token verifizieren
-        try {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET);
-          
-          // Benutzerinformationen am Socket speichern
-          socket.userId = decoded.id || decoded.userId;
-          socket.username = decoded.username || 'Benutzer';
-          
-          console.log(`Authentifizierter Benutzer ${socket.username} (${socket.userId}) verbunden`);
-        } catch (err) {
-          console.log('Ungültiges Token, setze anonymen Benutzer');
-          // Bei ungültigem Token trotzdem verbinden lassen, aber als anonymen Benutzer
-          socket.userId = 'anonymous';
-          socket.username = 'Gast';
-        }
-      } else {
-        // Kein Token, trotzdem verbinden lassen
-        socket.userId = 'anonymous';
-        socket.username = 'Gast';
+      if (!token) {
+        return next(new Error('Kein Token vorhanden'));
       }
+      
+      // Token verifizieren
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.userId = decoded.id || decoded.userId || decoded._id;
+      socket.username = decoded.username || decoded.email || 'Unknown';
+      
+      console.log(`User authentifiziert: ${socket.username} (${socket.userId})`);
       next();
+      
     } catch (error) {
-      console.error('WebSocket-Authentifizierungsfehler:', error);
-      next();
+      console.error('Auth-Fehler:', error.message);
+      next(new Error('Authentifizierung fehlgeschlagen'));
     }
   });
 
-  // WebSocket-Verbindungen verarbeiten
+  // Verbindungs-Events
   io.on('connection', (socket) => {
-    console.log(`Neue WebSocket-Verbindung: ${socket.id} (${socket.username || 'Unbekannt'})`);
-    
-    // Chat beitreten
-    socket.on('joinChat', ({ chatId }) => {
-      if (!chatId) return;
-      console.log(`Socket ${socket.id} (${socket.username}) tritt Chat ${chatId} bei`);
+    console.log(`Neue WebSocket-Verbindung: ${socket.id}`);
+    console.log(`User: ${socket.username} (${socket.userId})`);
+
+    // Join personal room
+    socket.join(`user:${socket.userId}`);
+
+    // Chat-Room beitreten
+    socket.on('joinChat', (chatId) => {
+      console.log(`User ${socket.userId} tritt Chat ${chatId} bei`);
       socket.join(chatId);
+      socket.emit('joinedChat', { chatId });
+    });
+
+    // Chat-Room verlassen
+    socket.on('leaveChat', (chatId) => {
+      console.log(`User ${socket.userId} verlässt Chat ${chatId}`);
+      socket.leave(chatId);
+    });
+
+    // Nachricht senden (altes System - bleibt für Kompatibilität)
+    socket.on('sendMessage', async (data) => {
+      console.log('Nachricht empfangen:', data);
       
-      // Aktive Benutzer im Chat verfolgen
-      if (!activeChatUsers.has(chatId)) {
-        activeChatUsers.set(chatId, new Set());
+      const { chatId, text } = data;
+      
+      if (!chatId || !text) {
+        return socket.emit('error', { message: 'ChatId und Text erforderlich' });
       }
-      activeChatUsers.get(chatId).add(socket.id);
-      
-      // Anzahl der aktiven Benutzer aktualisieren (optional)
-      io.to(chatId).emit('userCount', {
+
+      // Nachricht an alle im Chat senden
+      io.to(chatId).emit('newMessage', {
         chatId,
-        count: activeChatUsers.get(chatId).size
+        userId: socket.userId,
+        username: socket.username,
+        text,
+        timestamp: new Date()
       });
     });
-    
-    // Chat verlassen
-    socket.on('leaveChat', ({ chatId }) => {
-      if (!chatId) return;
-      console.log(`Socket ${socket.id} (${socket.username}) verlässt Chat ${chatId}`);
-      socket.leave(chatId);
-      
-      // Benutzer aus aktiver Liste entfernen
-      if (activeChatUsers.has(chatId)) {
-        activeChatUsers.get(chatId).delete(socket.id);
-        
-        // Anzahl der aktiven Benutzer aktualisieren (optional)
-        io.to(chatId).emit('userCount', {
-          chatId,
-          count: activeChatUsers.get(chatId).size
-        });
-      }
+
+    // Typing-Indikator
+    socket.on('typing', (data) => {
+      const { chatId, isTyping } = data;
+      socket.to(chatId).emit('userTyping', {
+        userId: socket.userId,
+        username: socket.username,
+        isTyping
+      });
     });
-    
-    // Nachricht senden
-    socket.on('message', (data) => {
-      try {
-        const { chatId, text, messageId } = data;
-        if (!chatId || !text) return;
-        
-        // WICHTIGE ÄNDERUNG: socket.to statt io.to
-        // Sendet nur an andere Clients im Raum, nicht an den Absender
-        socket.to(chatId).emit('message', {
-          chatId,
-          message: {
-            id: messageId || 'temp-' + Date.now(),
-            userId: socket.userId || 'unknown',
-            username: socket.username || 'Unbekannt',
-            text: text,
-            timestamp: new Date()
-          }
-        });
-        
-        console.log(`Nachricht von ${socket.username} (${socket.userId}) an Chat ${chatId} weitergeleitet`);
-      } catch (error) {
-        console.error('Fehler beim Weiterleiten der Nachricht:', error);
-      }
-    });
-    
-    // Verbindung getrennt
+
+    // Disconnection
     socket.on('disconnect', () => {
-      console.log(`Socket ${socket.id} (${socket.username}) getrennt`);
-      
-      // Benutzer aus allen aktiven Chat-Räumen entfernen
-      for (const [chatId, users] of activeChatUsers.entries()) {
-        if (users.has(socket.id)) {
-          users.delete(socket.id);
-          
-          // Anzahl der aktiven Benutzer aktualisieren
-          io.to(chatId).emit('userCount', {
-            chatId,
-            count: users.size
-          });
-        }
-      }
+      console.log(`User ${socket.username} disconnected`);
+    });
+
+    // Error handling
+    socket.on('error', (error) => {
+      console.error('Socket-Fehler:', error);
     });
   });
 
-  console.log('WebSocket-Server initialisiert');
   return io;
 }
 
-module.exports = { initWebSocket };
+// NEU: Getter Funktion für andere Module
+function getIO() {
+  if (!ioInstance) {
+    throw new Error('Socket.IO wurde noch nicht initialisiert!');
+  }
+  return ioInstance;
+}
+
+// Exportiere BEIDE Funktionen
+module.exports = {
+  initWebSocket,
+  getIO  // NEU: Diese Funktion wird von chat.controller.js benötigt!
+};

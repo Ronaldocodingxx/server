@@ -276,25 +276,72 @@ server.listen(PORT, '0.0.0.0', () => {
   }
 });
 
-// Graceful Shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM empfangen. Server wird heruntergefahren...');
-  server.close(() => {
-    console.log('Server beendet.');
-    mongoose.connection.close(false, () => {
-      console.log('MongoDB-Verbindung geschlossen.');
+// Variable um mehrfache Shutdowns zu verhindern
+let isShuttingDown = false;
+
+// Graceful Shutdown - KORRIGIERT
+process.on('SIGTERM', async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  
+  console.log('\nSIGTERM empfangen. Server wird heruntergefahren...');
+  
+  // Timeout für erzwungenes Beenden nach 10 Sekunden
+  setTimeout(() => {
+    console.error('Erzwungenes Beenden nach Timeout');
+    process.exit(1);
+  }, 10000);
+  
+  server.close(async () => {
+    console.log('HTTP Server geschlossen.');
+    
+    try {
+      await mongoose.connection.close();
+      console.log('MongoDB Verbindung geschlossen.');
+      console.log('Server beendet.');
       process.exit(0);
-    });
+    } catch (error) {
+      console.error('Fehler beim Schließen:', error);
+      process.exit(1);
+    }
   });
 });
 
-process.on('SIGINT', () => {
-  console.log('SIGINT empfangen. Server wird heruntergefahren...');
-  server.close(() => {
-    console.log('Server beendet.');
-    mongoose.connection.close(false, () => {
-      console.log('MongoDB-Verbindung geschlossen.');
+process.on('SIGINT', async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  
+  console.log('\nSIGINT empfangen. Server wird heruntergefahren...');
+  
+  // Timeout für erzwungenes Beenden nach 10 Sekunden
+  setTimeout(() => {
+    console.error('Erzwungenes Beenden nach Timeout');
+    process.exit(1);
+  }, 10000);
+  
+  server.close(async () => {
+    console.log('HTTP Server geschlossen.');
+    
+    try {
+      await mongoose.connection.close();
+      console.log('MongoDB Verbindung geschlossen.');
+      console.log('Server beendet.');
       process.exit(0);
-    });
+    } catch (error) {
+      console.error('Fehler beim Schließen:', error);
+      process.exit(1);
+    }
   });
+});
+
+// Unhandled Rejections
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Promise Rejection:', err);
+  // Server nicht sofort beenden, nur loggen
+});
+
+// Uncaught Exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
 });
